@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.util.Log;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
@@ -815,7 +816,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnVpn.setOnClickListener(v -> openVpnPill());
-        btnBluetooth.setOnClickListener(v -> open(bluetoothIntent()));
+        btnBluetooth.setOnClickListener(v -> openBluetoothPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
@@ -3121,8 +3122,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * vpn_pill the VPN app has its own pill, so this one always opens Wi-Fi settings.
      */
     private void openNetworkPill() {
-        Intent i = vpnPill ? null : vpnAppIntent();
-        open(i != null ? i : systemIntent(Settings.ACTION_WIFI_SETTINGS));
+        if (vpnPill) {
+            Intent i = vpnAppIntent();
+            open(i != null ? i : systemIntent(Settings.ACTION_WIFI_SETTINGS));
+            return;
+        }
+        // The network list itself, not the settings menu: on this box (MiTV-AFMU0, Google TV 14)
+        // WIFI_SETTINGS answers with a MainSettings alias, so the pill only reached the generic
+        // menu (on-TV verified 2026-11-02), while its package manager queries even report
+        // "no activity found" for intents that do start — try-first, the resolve checks lie.
+        // The stock ATV connectivity activity carries that list; the panel action and the
+        // standard chain follow for other firmware.
+        if (tryOpen(new Intent().setClassName("com.android.tv.settings",
+                "com.android.tv.settings.connectivity.NetworkActivity"))) return;
+        if (tryOpen(new Intent("android.settings.panel.action.WIFI"))) return;
+        open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
     }
 
     /** vpn_app's launch intent, or null when none is set or it is not installed. */
@@ -3189,18 +3203,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return SystemSettings.intent(this, standardAction);
     }
 
-    /** The Bluetooth screen: the standard action where a firmware answers it (Google TV 14 does),
-     *  else Android TV's own accessories pairing screen (com.google.android.intent.action.CONNECT_INPUT
-     *  → AddAccessoryActivity): on an Android 8 Philips nothing answers BLUETOOTH_SETTINGS and
-     *  MainSettings is not exported, so the generic fallback only shows "not available" (#2977),
-     *  else the generic settings fallback chain. */
-    private Intent bluetoothIntent() {
-        PackageManager pm = getPackageManager();
-        Intent std = new Intent(Settings.ACTION_BLUETOOTH_SETTINGS);
-        if (pm.resolveActivity(std, PackageManager.MATCH_DEFAULT_ONLY) != null) return std;
-        Intent connect = new Intent("com.google.android.intent.action.CONNECT_INPUT");
-        if (pm.resolveActivity(connect, PackageManager.MATCH_DEFAULT_ONLY) != null) return connect;
-        return systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS);
+    /** The Bluetooth pill: straight to Android TV's own "Searching for accessories" screen
+     *  (com.google.android.intent.action.CONNECT_INPUT → AddAccessoryActivity) where the firmware
+     *  offers it — pairing headphones or a controller in one click — else the standard action,
+     *  else the generic chain. On this box (MiTV-AFMU0, Google TV 14) and on an Android 8 Philips
+     *  (priku, #2977) BLUETOOTH_SETTINGS has no screen of its own: the pill only reached the
+     *  generic settings menu (on-TV verified 2026-11-02), and the queries report "no activity
+     *  found" for intents that do start, so try-first beats every resolveActivity() check. */
+    private void openBluetoothPill() {
+        if (tryOpen(new Intent("com.google.android.intent.action.CONNECT_INPUT"))) return;
+        open(systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS));
     }
 
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
@@ -3305,6 +3317,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             startActivity(i);
         } catch (ActivityNotFoundException | SecurityException e) {
             Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Like open() without the "not available" toast: for a chain of attempts, where only the last
+     *  failure is worth a toast. */
+    private boolean tryOpen(Intent i) {
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(i);
+            Log.d("TvHomePill", "opened " + i);
+            return true;
+        } catch (ActivityNotFoundException | SecurityException e) {
+            Log.w("TvHomePill", "refused " + i, e);
+            return false;
         }
     }
 
@@ -3684,7 +3710,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             status.setVisibility(View.VISIBLE);
         }
         addInputRow(rows, popup, R.drawable.ic_bluetooth, getString(R.string.bluetooth), -1,
-                () -> open(bluetoothIntent()));
+                () -> openBluetoothPill());
         addInputRow(rows, popup, R.drawable.ic_swap_vert, getString(R.string.reorder), -1, this::toggleReorder);
         if (launcherSettingsButton) {
             addInputRow(rows, popup, R.drawable.ic_home_settings_pill, getString(R.string.launcher_settings), -1,

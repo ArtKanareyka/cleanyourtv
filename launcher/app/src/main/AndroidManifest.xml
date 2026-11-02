@@ -14,6 +14,11 @@
          FINE" rule does not apply here. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
         tools:ignore="CoarseFineLocation" />
+    <!-- Needed since Android 12 for the Bluetooth pill to open the accessories pairing screen:
+         AddAccessoryActivity checks the caller holds BLUETOOTH_CONNECT. Granted with pm grant by
+         build-and-install, like ACCESS_FINE_LOCATION; without the grant the pill falls back to the
+         Bluetooth settings chain as before. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Puts the remote's accessibility helpers back after a force stop of this app took them off the enabled
          list (ServiceRepair). Granted with pm grant by build-and-install when a helper is enabled. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
