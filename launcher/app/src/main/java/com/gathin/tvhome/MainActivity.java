@@ -221,6 +221,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** vpn_pill: the VPN shown as its own pill (btnVpn) instead of a badge in the network pill. Off with top_menu. */
     private boolean vpnPill;
     private TextView btnVpn;
+    private TextView btnBluetooth;
     /** The VpnBadge pill state btnVpn shows, so a refresh that changes nothing does not restyle it. */
     private int vpnPillState = VpnBadge.PILL_HIDDEN;
     /** icon_only_vpn: the VPN pill is a round lock button; off, it keeps the plain glass look saved here. */
@@ -600,6 +601,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
         btnVpn = findViewById(R.id.btnVpn);
+        btnBluetooth = findViewById(R.id.btnBluetooth);
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
         libraryExcludedApps = new HashSet<>(cfg.libraryExcludedApps);
@@ -813,6 +815,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnVpn.setOnClickListener(v -> openVpnPill());
+        btnBluetooth.setOnClickListener(v -> open(bluetoothIntent()));
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
@@ -831,6 +834,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnReorder.setOnClickListener(v -> toggleReorder());
         btnReorder.setVisibility(cfg.reorderButton ? View.VISIBLE : View.GONE);
         if (!cfg.showNetworkPill) btnWifi.setVisibility(View.GONE);
+        btnBluetooth.setVisibility(cfg.showBluetoothPill && !cfg.topMenu ? View.VISIBLE : View.GONE);
         showInputsPill = cfg.showInputsPill;
         showInputsMenuRow = cfg.showInputsPill;
         btnLibraryTop = findViewById(R.id.btnLibraryTop);
@@ -873,6 +877,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
             else makeIconOnly(btnWifi);
             makeIconOnly((TextView) btnSettings);
+            makeIconOnly((TextView) btnBluetooth);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
         iconOnlyVpn = vpnPill && cfg.iconOnlyVpn;
@@ -906,12 +911,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnVpn.setOnKeyListener(pillKeys);
+        btnBluetooth.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
         if (advancedEffects) {
-            List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnVpn, btnReorder, btnLibraryTop, btnSettings));
+            List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnVpn, btnBluetooth, btnReorder, btnLibraryTop, btnSettings));
             pills.addAll(topAppButtons);
             for (View button : pills) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
@@ -3183,6 +3189,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return SystemSettings.intent(this, standardAction);
     }
 
+    /** The Bluetooth screen: the standard action where a firmware answers it (Google TV 14 does),
+     *  else Android TV's own accessories pairing screen (com.google.android.intent.action.CONNECT_INPUT
+     *  → AddAccessoryActivity): on an Android 8 Philips nothing answers BLUETOOTH_SETTINGS and
+     *  MainSettings is not exported, so the generic fallback only shows "not available" (#2977),
+     *  else the generic settings fallback chain. */
+    private Intent bluetoothIntent() {
+        PackageManager pm = getPackageManager();
+        Intent std = new Intent(Settings.ACTION_BLUETOOTH_SETTINGS);
+        if (pm.resolveActivity(std, PackageManager.MATCH_DEFAULT_ONLY) != null) return std;
+        Intent connect = new Intent("com.google.android.intent.action.CONNECT_INPUT");
+        if (pm.resolveActivity(connect, PackageManager.MATCH_DEFAULT_ONLY) != null) return connect;
+        return systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS);
+    }
+
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
         if (!showInputsPill) {
@@ -3663,6 +3683,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             status.setText(network);
             status.setVisibility(View.VISIBLE);
         }
+        addInputRow(rows, popup, R.drawable.ic_bluetooth, getString(R.string.bluetooth), -1,
+                () -> open(bluetoothIntent()));
         addInputRow(rows, popup, R.drawable.ic_swap_vert, getString(R.string.reorder), -1, this::toggleReorder);
         if (launcherSettingsButton) {
             addInputRow(rows, popup, R.drawable.ic_home_settings_pill, getString(R.string.launcher_settings), -1,
