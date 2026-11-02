@@ -794,7 +794,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnVpn.setOnClickListener(v -> openVpnPill());
-        btnBluetooth.setOnClickListener(v -> open(systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS)));
+        btnBluetooth.setOnClickListener(v -> open(bluetoothIntent()));
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
@@ -3151,6 +3151,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return SystemSettings.intent(this, standardAction);
     }
 
+    /** The Bluetooth screen: the standard action where a firmware answers it (Google TV 14 does),
+     *  else Android TV's own accessories pairing screen (com.google.android.intent.action.CONNECT_INPUT
+     *  → AddAccessoryActivity): on an Android 8 Philips nothing answers BLUETOOTH_SETTINGS and
+     *  MainSettings is not exported, so the generic fallback only shows "not available" (#2977),
+     *  else the generic settings fallback chain. */
+    private Intent bluetoothIntent() {
+        PackageManager pm = getPackageManager();
+        Intent std = new Intent(Settings.ACTION_BLUETOOTH_SETTINGS);
+        if (pm.resolveActivity(std, PackageManager.MATCH_DEFAULT_ONLY) != null) return std;
+        Intent connect = new Intent("com.google.android.intent.action.CONNECT_INPUT");
+        if (pm.resolveActivity(connect, PackageManager.MATCH_DEFAULT_ONLY) != null) return connect;
+        return systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS);
+    }
+
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
         if (!showInputsPill) {
@@ -3617,7 +3631,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             status.setVisibility(View.VISIBLE);
         }
         addInputRow(rows, popup, R.drawable.ic_bluetooth, getString(R.string.bluetooth), -1,
-                () -> open(systemIntent(Settings.ACTION_BLUETOOTH_SETTINGS)));
+                () -> open(bluetoothIntent()));
         addInputRow(rows, popup, R.drawable.ic_swap_vert, getString(R.string.reorder), -1, this::toggleReorder);
         if (launcherSettingsButton) {
             addInputRow(rows, popup, R.drawable.ic_home_settings_pill, getString(R.string.launcher_settings), -1,
